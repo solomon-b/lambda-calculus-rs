@@ -93,7 +93,7 @@ mod evaluator {
     pub fn multi_step_eval(term: Expr) -> Expr {
         match single_eval(term.clone()) {
             Some(val) => multi_step_eval(val),
-            None => term.clone(),
+            None => term,
         }
     }
 }
