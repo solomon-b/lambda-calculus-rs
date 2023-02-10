@@ -1,19 +1,20 @@
 pub mod ast {
     #[derive(Clone, Debug)]
-    pub enum Expr {
-        Var(String),
-        Abs(String, Box<Expr>),
-        App(Box<Expr>, Box<Expr>),
+    pub enum Expr<'a> {
+        Var(&'a str),
+        Abs(&'a str, Box<Expr<'a>>),
+        App(Box<Expr<'a>>, Box<Expr<'a>>),
     }
 
     pub fn var(var: &str) -> Expr {
-        Expr::Var(var.to_string())
-    }
-    pub fn abs(bndr: &str, body: Expr) -> Expr {
-        Expr::Abs(bndr.to_string(), Box::new(body))
+        Expr::Var(var)
     }
 
-    pub fn app(t1: Expr, t2: Expr) -> Expr {
+    pub fn abs<'a>(bndr: &'a str, body: Expr<'a>) -> Expr<'a> {
+        Expr::Abs(bndr, Box::new(body))
+    }
+
+    pub fn app<'a>(t1: Expr<'a>, t2: Expr<'a>) -> Expr<'a> {
         Expr::App(Box::new(t1), Box::new(t2))
     }
 }
@@ -23,11 +24,11 @@ mod substitution {
 
     use super::ast::Expr;
 
-    fn free_vars(term: &Expr) -> HashSet<String> {
+    fn free_vars<'a>(term: &Expr<'a>) -> HashSet<&'a str> {
         match term {
             Expr::Var(x) => {
-                let mut var: HashSet<String> = HashSet::new();
-                var.insert(x.clone());
+                let mut var = HashSet::new();
+                var.insert(*x);
                 var
             }
             Expr::Abs(bndr, t1) => {
@@ -44,12 +45,12 @@ mod substitution {
         }
     }
 
-    pub fn subst(x: &String, s: &Expr, term: &Expr) -> Expr {
+    pub fn subst<'a>(x: &'a str, s: &Expr<'a>, term: &Expr<'a>) -> Expr<'a> {
         match term {
-            Expr::Var(y) if x == y => s.clone(),
-            Expr::Var(y) => Expr::Var(y.clone()),
-            Expr::Abs(y, t1) if x != y && !free_vars(s).contains(y) => {
-                Expr::Abs(y.clone(), Box::new(subst(x, s, t1.as_ref())))
+            Expr::Var(y) if x == *y => s.clone(),
+            Expr::Var(y) => Expr::Var(y),
+            Expr::Abs(y, t1) if x != *y && !free_vars(s).contains(y) => {
+                Expr::Abs(y, Box::new(subst(x, s, t1.as_ref())))
             }
             Expr::Abs(_, _) => {
                 panic!("oops name collision!")
@@ -77,7 +78,7 @@ mod evaluator {
         match term {
             Expr::App(t1, t2) => match *t1 {
                 Expr::Abs(x, t12) if is_val(t2.as_ref()) => {
-                    Some(substitution::subst(&x, t2.as_ref(), t12.as_ref()))
+                    Some(substitution::subst(x, t2.as_ref(), t12.as_ref()))
                 }
 
                 v1 @ Expr::Abs(_, _) => {
@@ -98,15 +99,15 @@ mod evaluator {
     }
 }
 
-pub fn true_t() -> ast::Expr {
+pub fn true_t<'a>() -> ast::Expr<'a> {
     ast::abs("p", ast::abs("q", ast::var("p")))
 }
 
-pub fn false_t() -> ast::Expr {
+pub fn false_t<'a>() -> ast::Expr<'a> {
     ast::abs("p", ast::abs("q", ast::var("q")))
 }
 
-pub fn not_t() -> ast::Expr {
+pub fn not_t<'a>() -> ast::Expr<'a> {
     ast::abs(
         "z",
         ast::app(
@@ -116,7 +117,7 @@ pub fn not_t() -> ast::Expr {
     )
 }
 
-pub fn app(t1: ast::Expr, t2: ast::Expr) -> ast::Expr {
+pub fn app<'a>(t1: ast::Expr<'a>, t2: ast::Expr<'a>) -> ast::Expr<'a> {
     ast::app(t1, t2)
 }
 
