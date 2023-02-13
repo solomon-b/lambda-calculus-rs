@@ -1,4 +1,5 @@
 pub mod ast {
+    use std::fmt;
     use ustr::Ustr;
 
     #[derive(Clone, Debug)]
@@ -6,6 +7,16 @@ pub mod ast {
         Var(Ustr, i64),
         Abs(Ustr, Box<Expr>),
         App(Box<Expr>, Box<Expr>),
+    }
+
+    impl fmt::Display for Expr {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Expr::Var(bndr, _) => write!(f, "{}", bndr),
+                Expr::Abs(bndr, t1) => write!(f, "λ{}. {}", bndr, t1),
+                Expr::App(t1, t2) => write!(f, "{} {}", t1, t2),
+            }
+        }
     }
 }
 
