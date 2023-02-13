@@ -1,13 +1,13 @@
 pub mod ast {
     #[derive(Clone, Debug)]
     pub enum Expr<'a> {
-        Var(&'a str),
+        Var(&'a str, i64),
         Abs(&'a str, Box<Expr<'a>>),
         App(Box<Expr<'a>>, Box<Expr<'a>>),
     }
 
-    pub fn var(var: &str) -> Expr {
-        Expr::Var(var)
+    pub fn var<'a>(var: &'a str, n: i64) -> Expr<'a> {
+        Expr::Var(var, n)
     }
 
     pub fn abs<'a>(bndr: &'a str, body: Expr<'a>) -> Expr<'a> {
@@ -20,46 +20,34 @@ pub mod ast {
 }
 
 mod substitution {
-    use std::collections::HashSet;
-
     use super::ast::Expr;
 
-    fn free_vars<'a>(term: &Expr<'a>) -> HashSet<&'a str> {
+    fn shift<'a>(d: i64, c: i64, term: &Expr<'a>) -> Expr<'a> {
         match term {
-            Expr::Var(x) => {
-                let mut var = HashSet::new();
-                var.insert(*x);
-                var
-            }
-            Expr::Abs(bndr, t1) => {
-                let mut vars = free_vars(t1.as_ref());
-                vars.remove(bndr);
-                vars
-            }
-            Expr::App(t1, t2) => {
-                let mut v1 = free_vars(t1.as_ref());
-                let v2 = free_vars(t2.as_ref());
-                v1.extend(v2);
-                v1
-            }
+            Expr::Var(bndr, k) if k < &c => Expr::Var(bndr, *k),
+            Expr::Var(bndr, k) => Expr::Var(&bndr, k + d),
+            Expr::Abs(bndr, t1) => Expr::Abs(bndr, Box::new(shift(d, c + 1, t1.as_ref()))),
+            Expr::App(t1, t2) => Expr::App(
+                Box::new(shift(d, c, t1.as_ref())),
+                Box::new(shift(d, c, t2.as_ref())),
+            ),
         }
     }
 
-    pub fn subst<'a>(x: &'a str, s: &Expr<'a>, term: &Expr<'a>) -> Expr<'a> {
+    fn subst<'a>(j: i64, s: Expr<'a>, term: &Expr<'a>) -> Expr<'a> {
         match term {
-            Expr::Var(y) if x == *y => s.clone(),
-            Expr::Var(y) => Expr::Var(y),
-            Expr::Abs(y, t1) if x != *y && !free_vars(s).contains(y) => {
-                Expr::Abs(y, Box::new(subst(x, s, t1.as_ref())))
-            }
-            Expr::Abs(_, _) => {
-                panic!("oops name collision!")
-            }
+            Expr::Var(_, k) if *k == j => s,
+            Expr::Var(bndr, k) => Expr::Var(bndr, *k),
+            Expr::Abs(bndr, t1) => Expr::Abs(bndr, Box::new(subst(j + 1, shift(1, 0, &s), t1))),
             Expr::App(t1, t2) => Expr::App(
-                Box::new(subst(x, s, t1.as_ref())),
-                Box::new(subst(x, s, t2.as_ref())),
+                Box::new(subst(j, s.clone(), t1.as_ref())),
+                Box::new(subst(j, s, t2.as_ref())),
             ),
         }
+    }
+
+    pub fn subst_top<'a>(s: Expr<'a>, t: Expr<'a>) -> Expr<'a> {
+        shift(-1, 0, &subst(0, shift(1, 0, &s), &t))
     }
 }
 
@@ -68,7 +56,7 @@ mod evaluator {
 
     fn is_val(term: &Expr) -> bool {
         match term {
-            Expr::Var(_) => false,
+            Expr::Var(_, _) => false,
             Expr::Abs(_, _) => true,
             Expr::App(_, _) => false,
         }
@@ -77,9 +65,10 @@ mod evaluator {
     fn single_eval(term: Expr) -> Option<Expr> {
         match term {
             Expr::App(t1, t2) => match *t1 {
-                Expr::Abs(x, t12) if is_val(t2.as_ref()) => {
-                    Some(substitution::subst(x, t2.as_ref(), t12.as_ref()))
-                }
+                Expr::Abs(_, t12) if is_val(t2.as_ref()) => Some(substitution::subst_top(
+                    t2.as_ref().clone(),
+                    t12.as_ref().clone(),
+                )),
 
                 v1 @ Expr::Abs(_, _) => {
                     single_eval(*t2).map(|t2| Expr::App(Box::new(v1), Box::new(t2)))
@@ -92,34 +81,31 @@ mod evaluator {
     }
 
     pub fn multi_step_eval(mut term: Expr) -> Expr {
-	loop {
-          match single_eval(term.clone()) {
-              Some(val) => {
-		  term = val;
-		  continue
-	      },
-              None => break,
-          }
-	}
-	term
+        loop {
+            match single_eval(term.clone()) {
+                Some(val) => {
+                    term = val;
+                    continue;
+                }
+                None => break,
+            }
+        }
+        term
     }
 }
 
 pub fn true_t<'a>() -> ast::Expr<'a> {
-    ast::abs("p", ast::abs("q", ast::var("p")))
+    ast::abs("p", ast::abs("q", ast::var("p", 1)))
 }
 
 pub fn false_t<'a>() -> ast::Expr<'a> {
-    ast::abs("p", ast::abs("q", ast::var("q")))
+    ast::abs("p", ast::abs("q", ast::var("q", 0)))
 }
 
 pub fn not_t<'a>() -> ast::Expr<'a> {
     ast::abs(
         "z",
-        ast::app(
-            ast::app(ast::var("z"), ast::abs("a", ast::abs("b", ast::var("b")))),
-            ast::abs("c", ast::abs("d", ast::var("c"))),
-        ),
+        ast::app(ast::app(ast::var("z", 0), false_t()), true_t()),
     )
 }
 
