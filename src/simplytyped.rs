@@ -1,20 +1,20 @@
 pub mod ast {
     #[derive(Clone, Debug)]
-    pub enum Expr<'a> {
-        Var(&'a str, i64),
-        Abs(&'a str, Box<Expr<'a>>),
-        App(Box<Expr<'a>>, Box<Expr<'a>>),
+    pub enum Expr {
+        Var(ustr::Ustr, i64),
+        Abs(ustr::Ustr, Box<Expr>),
+        App(Box<Expr>, Box<Expr>),
     }
 
-    pub fn var<'a>(var: &'a str, n: i64) -> Expr<'a> {
+    pub fn var(var: ustr::Ustr, n: i64) -> Expr {
         Expr::Var(var, n)
     }
 
-    pub fn abs<'a>(bndr: &'a str, body: Expr<'a>) -> Expr<'a> {
+    pub fn abs(bndr: ustr::Ustr, body: Expr) -> Expr {
         Expr::Abs(bndr, Box::new(body))
     }
 
-    pub fn app<'a>(t1: Expr<'a>, t2: Expr<'a>) -> Expr<'a> {
+    pub fn app(t1: Expr, t2: Expr) -> Expr {
         Expr::App(Box::new(t1), Box::new(t2))
     }
 }
@@ -22,32 +22,32 @@ pub mod ast {
 mod substitution {
     use super::ast::Expr;
 
-    fn shift<'a>(d: i64, c: i64, term: &Expr<'a>) -> Expr<'a> {
+    fn shift(d: i64, c: i64, term: Expr) -> Expr {
         match term {
-            Expr::Var(bndr, k) if k < &c => Expr::Var(bndr, *k),
-            Expr::Var(bndr, k) => Expr::Var(&bndr, k + d),
-            Expr::Abs(bndr, t1) => Expr::Abs(bndr, Box::new(shift(d, c + 1, t1.as_ref()))),
+            Expr::Var(bndr, k) if k < c => Expr::Var(bndr, k),
+            Expr::Var(bndr, k) => Expr::Var(bndr, k + d),
+            Expr::Abs(bndr, t1) => Expr::Abs(bndr, Box::new(shift(d, c + 1, *t1))),
             Expr::App(t1, t2) => Expr::App(
-                Box::new(shift(d, c, t1.as_ref())),
-                Box::new(shift(d, c, t2.as_ref())),
+                Box::new(shift(d, c, *t1)),
+                Box::new(shift(d, c, *t2)),
             ),
         }
     }
 
-    fn subst<'a>(j: i64, s: Expr<'a>, term: &Expr<'a>) -> Expr<'a> {
+    fn subst(j: i64, s: Expr, term: Expr) -> Expr {
         match term {
-            Expr::Var(_, k) if *k == j => s,
-            Expr::Var(bndr, k) => Expr::Var(bndr, *k),
-            Expr::Abs(bndr, t1) => Expr::Abs(bndr, Box::new(subst(j + 1, shift(1, 0, &s), t1))),
+            Expr::Var(_, k) if k == j => s,
+            Expr::Var(bndr, k) => Expr::Var(bndr, k),
+            Expr::Abs(bndr, t1) => Expr::Abs(bndr, Box::new(subst(j + 1, shift(1, 0, s), *t1))),
             Expr::App(t1, t2) => Expr::App(
-                Box::new(subst(j, s.clone(), t1.as_ref())),
-                Box::new(subst(j, s, t2.as_ref())),
+                Box::new(subst(j, s.clone(), *t1)),
+                Box::new(subst(j, s, *t2)),
             ),
         }
     }
 
-    pub fn subst_top<'a>(s: Expr<'a>, t: Expr<'a>) -> Expr<'a> {
-        shift(-1, 0, &subst(0, shift(1, 0, &s), &t))
+    pub fn subst_top(s: Expr, t: Expr) -> Expr {
+        shift(-1, 0, subst(0, shift(1, 0, s), t))
     }
 }
 
@@ -66,8 +66,8 @@ mod evaluator {
         match term {
             Expr::App(t1, t2) => match *t1 {
                 Expr::Abs(_, t12) if is_val(t2.as_ref()) => Some(substitution::subst_top(
-                    t2.as_ref().clone(),
-                    t12.as_ref().clone(),
+                    *t2.clone(),
+                    *t12,
                 )),
 
                 v1 @ Expr::Abs(_, _) => {
@@ -94,22 +94,22 @@ mod evaluator {
     }
 }
 
-pub fn true_t<'a>() -> ast::Expr<'a> {
-    ast::abs("p", ast::abs("q", ast::var("p", 1)))
+pub fn true_t() -> ast::Expr {
+    ast::abs(ustr::ustr("p"), ast::abs(ustr::ustr("q"), ast::var(ustr::ustr("p"), 1)))
 }
 
-pub fn false_t<'a>() -> ast::Expr<'a> {
-    ast::abs("p", ast::abs("q", ast::var("q", 0)))
+pub fn false_t() -> ast::Expr {
+    ast::abs(ustr::ustr("p"), ast::abs(ustr::ustr("q"), ast::var(ustr::ustr("q"), 0)))
 }
 
-pub fn not_t<'a>() -> ast::Expr<'a> {
+pub fn not_t() -> ast::Expr {
     ast::abs(
-        "z",
-        ast::app(ast::app(ast::var("z", 0), false_t()), true_t()),
+        ustr::ustr("z"),
+        ast::app(ast::app(ast::var(ustr::ustr("z"), 0), false_t()), true_t()),
     )
 }
 
-pub fn app<'a>(t1: ast::Expr<'a>, t2: ast::Expr<'a>) -> ast::Expr<'a> {
+pub fn app<'a>(t1: ast::Expr, t2: ast::Expr) -> ast::Expr {
     ast::app(t1, t2)
 }
 
