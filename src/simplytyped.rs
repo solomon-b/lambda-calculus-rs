@@ -18,6 +18,32 @@ pub mod ast {
             }
         }
     }
+
+    pub mod macros {
+      macro_rules! var {
+          ($var: expr, $i: expr) => {
+              Var(ustr($var), $i)
+          };
+      }
+
+      pub(crate) use var;
+
+      macro_rules! abs {
+          ($var: expr, $expr: expr) => {
+              Abs(ustr($var), Box::new($expr))
+          };
+      }
+
+      pub(crate) use abs;
+
+      macro_rules! app {
+          ($t1: expr, $t2: expr) => {
+              App(Box::new($t1), Box::new($t2))
+          };
+      }
+
+      pub(crate) use app;
+    }
 }
 
 mod substitution {
@@ -88,33 +114,23 @@ mod evaluator {
     }
 }
 
+use ast::Expr;
 use ast::Expr::*;
+use ast::macros::{abs, app, var};
 use ustr::ustr;
 
-pub fn true_t() -> ast::Expr {
-    Abs(
-        ustr("p"),
-        Box::new(Abs(ustr("q"), Box::new(Var(ustr("p"), 1)))),
-    )
+pub fn true_t() -> Expr {
+    abs!("p", abs!("q", var!("p", 1)))
 }
 
-pub fn false_t() -> ast::Expr {
-    Abs(
-        ustr("p"),
-        Box::new(Abs(ustr("q"), Box::new(Var(ustr("q"), 0)))),
-    )
+pub fn false_t() -> Expr {
+    abs!("p", abs!("q", var!("q", 0)))
 }
 
-pub fn not_t() -> ast::Expr {
-    Abs(
-        ustr("z"),
-        Box::new(App(
-            Box::new(App(Box::new(Var(ustr("z"), 0)), Box::new(false_t()))),
-            Box::new(true_t()),
-        )),
-    )
+pub fn not_t() -> Expr {
+    abs!("z", app!(app!(var!("z", 0), false_t()), true_t()))
 }
 
-pub fn eval(term: ast::Expr) -> ast::Expr {
+pub fn eval(term: Expr) -> Expr {
     evaluator::multi_step_eval(term)
 }
